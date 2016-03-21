@@ -1,0 +1,383 @@
+---
+title: "R Markdown and Interactive Graphic"
+output: slidy_presentation
+params:
+  State: "NC"
+  HM_Measure:  "Males"
+  Sankey_County: "Mecklenburg"
+---
+
+
+```{r setup, include=FALSE}
+library(xtable)
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(tidyr)
+
+setwd("C:/Users/Greg/Documents/R/R Markdown Presentation 3-15-2015")
+```
+
+## The Agenda
+
+1. Introductions
+       i) Name       
+       ii) Where you work
+       iii) R Coding Experience
+       iiii) Last thing you did in R or Current Project     
+
+2. R Markdown Overview
+3. Sample Presentation
+4. Code Review
+
+## What is R markdown?
+
+### From RStudio
+*R Markdown is an authoring format that enables easy creation of dynamic documents, presentations, and reports from R. It combines the core syntax of markdown (an easy to write plain text format) with embedded R code chunks that are run so their output can be included in the final document. R Markdown documents are fully reproducible (they can be automatically regenerated whenever underlying R code or data changes).*
+
+As an example, this:
+
+> \*Welcome\*
+
+Becomes this:
+
+> *Welcome*
+
+
+For a lot of examples on what you can do with RMarkdown check out:
+
+<http://www.rpubs.com/>
+
+Another great resource is RStudios's cheatsheets:
+
+<https://www.rstudio.com/resources/cheatsheets/>
+
+
+
+
+## Why Use R Markdown
+
+###This presentation is an example of how to use R Markdown with interactive graphics {.bigger}
+
+<span style ="color:#D4001A">
+Some of the advantages to this approach include:
+</span>
+
+
+>- Repeatability - It is easy to re-run code and produce similar results again and again
+     
+>- Flexibility - You can esily change the code to include different time periods or measures
+
+>- Interactivity - Because it is HTML you can include interactive html elements
+ 
+>- Ease of Sharing - Again, because it is HTML all you need to view it is a web browser
+
+
+
+## It Ain't All Roses Though
+<span style ="color:#D4001A">
+There are some disadvantages
+</span>
+
+>- Time - It generally takes longer to make a Markdown doc than a regular powerpoint
+
+>- Ease of use - Flexibility comes with a price, and RMarkdown can be finicky sometimes
+
+>- Pre-Reqs - To really customize past the general layouts, you would probably need to know html
+
+
+
+## Let's look at some data!
+
+It is election season, and I won't be another outlet endlessly examining politics. However some of the coverage got me thinking about demographics, so I thought that might be interesting to examine.
+
+The American Community Survey (ACS), which is part of the Census Bureau is a treasure trove of information.  Through a variety of methods they estimate many different aspects of American life.
+
+<http://www.census.gov>
+
+Luckily for us there is a publicly available API.  Not only that, Ezra Glenn at MIT has written an R package with helper fuctions to make it easy(ish) to find and pull back data.  He has written a very easy to follow paper on the package, which you can read via the link below.
+
+<http://eglenn.scripts.mit.edu/citystate/wp-content/uploads/2013/06/wpid-working_with_acs_R3.pdf>
+
+
+
+## Defining the Geography
+### The Code
+
+The code below creates a geography for all of North Carolina at the county level.
+
+
+```{r Set Geography, warning=FALSE, message=FALSE }
+library(acs)
+NC_Area = geo.make(state = params$State, county = "*", check = T)
+```
+
+* The state argument is set by a parameter, which I'll show when we go over the markdown code. I could also have set it with a string of "NC"
+* The county parameter of "*" just means all counties, I could have specified counties by name or FIPS code
+* Check = TRUE is handy because it makes sure that you have a valid geography before you start trying to pull data
+
+
+There is a handy lookup table function you can leverage as well if you are unsure of spelling or FIPS number
+
+```{r geo_lookup, eval = FALSE}
+geo.lookup(state = "NC", county = "A")
+
+```
+
+```{r results= "asis", echo=FALSE}
+data = geo.lookup(state = params$State, county = "A")
+print(xtable(data), 
+      type = "html", 
+      html.table.attributes = "border=0", 
+      include.rownames = FALSE)
+```
+
+
+## Finding the right data
+
+Unfortunately grabbing data from the API is not intuitive, mainly because there is **SO MUCH DATA**.  If you really get into it there are several different handbooks you can buy to guid you through all the data  
+  
+Luckily Ezra has provided us with a handy lookup function.  
+
+```{r data_lookup, eval = FALSE}
+results(acs.lookup(table.name = "College"))
+```
+
+The call above yields 33 rows, and I've shown you the first few below.
+
+```{r data_lookup_results, results='asis', echo=FALSE}
+
+Lookup = results(acs.lookup(table.name = "College"))
+print(head(xtable(Lookup),10),
+      type = "html", 
+      html.table.attributes = "border=0", 
+      include.rownames = FALSE)
+
+```
+
+## Grabbing the Data from the Interwebs
+
+Once you have searched, and found some things you are interested in its time to actually grab the data!  This involves 2 steps:  
+
+1. Use the acs.fetch function to grab the data down as an acs object
+2. Turn the acs object into a data frame using the estimates
+
+```{r fetch_example, eval=FALSE}
+library(DT)
+#Actually call the API and return the data as an acs object
+NC_Data = acs.fetch(geography = NC_Area, 
+                           variable = c("B01003_001", "B01001_002", "B01001_026", 
+                                        "B25026_003", "B25026_004", "B25026_005", 
+                                        "B25026_006", "B25026_007", "B25026_008"),
+                           col.names = c("Total", "Males", "Females", "Moved in After 2005", 
+                                         "Between 2000 and 04", "Between 90 and 99", 
+                                         "Between 80 and 89",  "Between 70 and 79", 
+                                         "Before 69") )
+
+
+#Turn acs into a data frame for easier manipulation
+NC_DF = data.frame(geography(NC_Data), estimate(NC_Data))%>%
+  left_join(fips.state, by = c("state" = "STATE"))
+
+row.names(NC_DF) = NULL
+
+datatable(NC_DF)
+```
+
+
+```{r fetch_table, echo=FALSE, results='asis'}
+
+NC_Data = acs.fetch(geography = NC_Area, 
+                           variable = c("B01003_001", "B01001_002", "B01001_026", "B25026_003",
+                                        "B25026_004", "B25026_005", "B25026_006", "B25026_007", "B25026_008"),
+                           col.names = c("Total", "Males", "Females", "Moved in After 2005", "Between 2000 and 04",
+                                         "Between 90 and 99", "Between 80 and 89",  "Between 70 and 79", 
+                                         "Before 69") )
+
+
+#Turn acs into a data frame for easier manipulation
+NC_DF = data.frame(geography(NC_Data), estimate(NC_Data))%>%
+  left_join(fips.state, by = c("state" = "STATE"))
+
+library(DT)
+datatable(NC_DF, options = list(autoWidth = TRUE),
+          colnames = gsub(".", " ", colnames(NC_DF), fixed = TRUE)  )
+```
+
+
+## Most Populated Counties
+
+The pareto below showing the top 20 most populous counties yeilds unsurprising results. Charlotte is in Mecklenburg County, Raliegh is mostly in Wake County, and Greensboro is in Guilford County
+   
+```{r Pop, echo=FALSE, warning=FALSE, message=FALSE}
+
+NC_DF%>%
+  top_n(n = 15, wt = Total)%>%
+  mutate(County = sapply(regmatches(NAME, regexec("^(.*) County,", NAME)), function(x) x[2]))%>%
+  arrange(desc(Total))%>%
+  select(County, Total)%>%
+  mutate(County = factor(County, levels = County, ordered = TRUE))%>%
+  ggplot()+
+  geom_bar(aes(x = County, y = Total),stat = "identity", fill = "#D40010")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  scale_y_continuous(label = comma)+
+  ggtitle("Most Populous Couties")+
+  ylab("Population")
+
+```
+
+
+And here is is a heatmap of all the counties:
+```{r heatmap, echo=FALSE, message=FALSE, warning=FALSE}
+library("haven") 
+library("viridisLite") #A good color scheme for heatmaps
+library(highcharter) #Wrapper for the Javascript highcharts package
+library(stringr)
+library(geojsonio)
+data("uscountygeojson")
+
+Heatmap_Data <- NC_DF %>% 
+  mutate(CODE = paste("us",
+                      tolower(STUSAB),
+                      str_pad(county, width = 3, pad = "0"),
+                      sep = "-"))
+
+n <- 32
+dstops <- data.frame(q = 0:n/n, c = substring(viridis(n + 1, option = "D"), 0, 7))
+dstops <- list.parse2(dstops)
+
+highchart() %>% 
+  hc_title(text = params$HM_Measure) %>% 
+  hc_add_series_map(map = geojson_read("us-nc-all.geo.json"), df = Heatmap_Data,
+                    value = params$HM_Measure, joinBy = c("hc-key", "CODE"),
+                    name = params$HM_Measure, borderWidth = 0.1) %>% 
+  hc_colorAxis(stops = dstops, min = 0, max = 800000) %>% 
+  hc_legend(layout = "vertical", reversed = TRUE,
+            floating = TRUE, align = "right") %>% 
+  hc_tooltip(valueDecimals = 0)
+
+
+
+```
+
+
+## Sankey Network
+
+The ACS also has a lot of split by several factors, which can be hard to visualize.  A good tool to put in your toolbox for this Situation is the Sankey Diagram.  After a bit of data cleaning and mainipulation, they can be easily created using the **networkD3** package with a single call:
+
+```{r Sample Sankey, eval=FALSE}
+
+sankeyNetwork(Links = Sankey_Data, Nodes = nodes, 
+              Source = "Source_Num", Target = "Targ_Num", Value = "Value", NodeID = "name")
+
+
+```
+
+
+```{r Sankey, echo=FALSE,  message=FALSE, warning=FALSE}
+
+
+College_geo = geo.make(state = params$State, county = params$Sankey_County, check = T)
+
+College_Data = acs.fetch(geography = College_geo, table.number = "B14004", col.names = "pretty")
+
+College_DF = data.frame(geography(College_Data), estimate(College_Data))
+
+row.names(College_DF) = NULL
+
+CDF2 = gather(College_DF, Variable, Population, -NAME, -state, -county)
+
+CDF2$VariableSimp = sapply(regmatches(CDF2$Variable, regexec(".*Yrs...(.*)", CDF2$Variable)), function(x) x[2])
+
+CDF2$V1 = sapply(regmatches(CDF2$VariableSimp, regexec("(^.*?)\\.\\..*", CDF2$VariableSimp)), function(x) x[2])
+CDF2$V2 = sapply(regmatches(CDF2$VariableSimp, regexec("^.*?\\.\\.(.*?)\\.\\.", CDF2$VariableSimp)), function(x) x[2])
+CDF2$V3 = sapply(regmatches(CDF2$VariableSimp, regexec("^.*?\\.\\..*?\\.\\.(.*)", CDF2$VariableSimp)), function(x) x[2])
+CDF2$V3 = ifelse(CDF2$V3=="", NA, CDF2$V3)
+
+CDF2$Source = NA
+CDF2$Target = NA
+CDF2$Value = NA
+
+for(i in 1:nrow(CDF2)){
+  
+  if(is.na(CDF2[i,"V3"]) & !is.na(CDF2[i,"V2"]) ){
+    CDF2[i, "Source"] =  CDF2[i,"V1"]
+    CDF2[i, "Target"] =  CDF2[i,"V2"]
+    CDF2[i, "Value"] =  CDF2[i,"Population"]
+    
+  }
+  
+  else if(!is.na(CDF2[i,"V3"]) & !is.na(CDF2[i,"V2"]) ){
+    CDF2[i, "Source"] =  CDF2[i,"V2"]
+    CDF2[i, "Target"] =  CDF2[i,"V3"]
+    CDF2[i, "Value"] =  CDF2[i,"Population"]
+  }
+  else if(is.na(CDF2[i,"V3"]) & is.na(CDF2[i,"V2"]) ){
+    CDF2[i, "Source"] =  "Total"
+    CDF2[i, "Target"] =  CDF2[i,"V1"]
+    CDF2[i, "Value"] =  CDF2[i,"Population"]
+    
+  }
+}
+
+library(networkD3)
+
+Sankey_Data = select(CDF2, Source, Target, Value)[-1,]
+
+nodes = as.data.frame(unique(c(Sankey_Data$Source, Sankey_Data$Target)))
+names(nodes) = "name"
+nodes$nodevalue = as.numeric(row.names(nodes))-1
+
+Sankey_Data = Sankey_Data%>%
+  mutate(Source_Num = sapply(Source, function(x){ nodes[match(x, nodes$name), "nodevalue"]}),
+         Targ_Num = sapply(Target, function(x){ nodes[match(x, nodes$name), "nodevalue"]}))
+
+
+sankeyNetwork(Links = Sankey_Data, Nodes = nodes, 
+              Source = "Source_Num", Target = "Targ_Num", Value = "Value", NodeID = "name")
+
+```
+
+
+
+##Owner vs Renter Population
+
+If it feels like everyone just moved to Charlotte, the numbers back that up.  Look at this chart created with the **highcharter** package, which is a great resource for creating interactive charts.
+
+```{r echo=FALSE,  message=FALSE, warning=FALSE}
+Own_Rent_Data = NC_Data = acs.fetch(geography = geo.make(state = "NC", county = "Mecklenburg"), 
+                                    variable = c("B25026_003","B25026_004", "B25026_005", "B25026_006", "B25026_007", "B25026_008",
+                                                 "B25026_010","B25026_011", "B25026_012", "B25026_013", "B25026_014", "B25026_015"),
+                                    col.names = c("Owned Moved in After 2005", "Owned Between 2000 and 04",
+                                                  "Owned Between 90 and 99", "Owned Between 80 and 89",  "Owned Between 70 and 79", 
+                                                  "Owned Before 69","Rent Moved in After 2005", "Rent Between 2000 and 04",
+                                                  "Rent Between 90 and 99", "Rent Between 80 and 89",  "Rent Between 70 and 79", 
+                                                  "Rent Before 69") )
+
+
+
+Own_Rent_DF = data.frame(geography(Own_Rent_Data), estimate(Own_Rent_Data))%>%
+  select(-NAME, -state, -county)%>%
+  gather(key = Variable,value = Population)%>%
+  mutate(Own_Rent = sapply(regmatches(Variable, regexec("^(.*?)\\.", Variable)), function(x) x[2]),
+         VAR = sapply(regmatches(Variable, regexec("^.*?\\.(.*)", Variable)), function(x) x[2]) )%>%
+  select(-Variable)%>%
+  spread(Own_Rent, Population, drop = TRUE)
+ 
+
+Ownership_Bar = highchart()%>%
+  hc_chart(type = "column")%>%
+  hc_title(text = "Own vs Rent") %>% 
+  hc_xAxis(categories = gsub(".", replacement = " ", Own_Rent_DF$VAR, fixed = TRUE)) %>% 
+  hc_add_series(data = Own_Rent_DF$Owned,
+                name = "Ownership Population")%>%
+  hc_add_series(data = Own_Rent_DF$Rent,
+                name = "Renter Population")
+  
+  
+Ownership_Bar
+
+
+```
+  
